@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Socket.io Example</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding: 20px;
+        }
+        .sent-message {
+            text-align: left;
+        }
+        
+        .message-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .profile-icon {
+            font-size: 24px;
+            margin-right: 10px;
+            margin-left: 10px;
+        }
+        .time {
+            margin-left: 10px;
+            color: white;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        .received-message .message-container {
+            float:right; /* Align content to the right for received messages */
+        }
+        
+        .bold-italic {
+            font-weight: bold;
+            font-style: italic;
+            color: black;
+            font-size: 30px;
+        }
+
+        .notification {
+            padding: 20px;
+            text-align: center; /* or use margin: 0 auto; for centering */
+            font-family: "Lucida Console", "Courier New", monospace;
+        }
+
+        .short-notification {
+            max-width: 50%; /* Adjust the max-width as needed */
+            background: none; /* Remove background */
+            padding: auto; /* Remove padding */
+            margin: auto; /* Remove margin */
+            display: flex;
+            justify-content: center; /* Center text horizontally */
+            align-items: center; /* Center text vertically */
+            font-size: 20px; /* Set font size */
+        }
+        
+        /* Add new style for the typing indicator */
+        .typing-indicator {
+            color: #888;
+            font-style: italic;
+        }
+
+        body {
+        background-image: url('background-Image/background_Image_2.png');
+        object-fit: fill;
+        }
+    </style>
+    
+</head>
+<body>
+    <div class ='rounded-circle, bg-success, bold-italic' style="margin:auto; color:white">
+        <p id="userConnected" style="padding: auto;"></p>
+    </div>
+    <!-- User Name Modal -->
+<div class="modal fade" id="userNameModal" tabindex="-1" aria-labelledby="userNameModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="userNameModalLabel">Welcome to Chatter Up!</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-info">Join the conversation and connect with others. Enter your name to get started.</p>
+                <form id="userNameForm">
+                    <div class="mb-3">
+                        <label for="userName" class="form-label">Name:</label>
+                        <input type="text" class="form-control" id="userName" required>
+                    </div>
+                    <button type="submit" class="btn btn-success">Join Chatter Up</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+    <div class="container">
+        <ul id="messages" class="list-group"></ul>
+        <form id="form" action="" class="mt-3">
+            <div class="input-group">
+                <input id="m" autocomplete="off" class="form-control" placeholder="Chat..." />
+                <button type="submit" class="btn btn-primary">Send</button>
+            </div>
+        </form>
+        <!-- Typing indicator -->
+        <div id="typingIndicator" class="typing-indicator"></div>
+    </div>
+
+    
+
+    <!-- Socket.io script -->
+    <script src="http://localhost:3000/socket.io/socket.io.js"></script>
+    <!-- Bootstrap JS and Popper.js -->
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const socket = io.connect('http://localhost:3000');
+            let userName = '';
+
+            // Show the user name modal
+            const userNameModal = new bootstrap.Modal(document.getElementById('userNameModal'));
+            const userNameForm = document.getElementById('userNameForm');
+            const userNameInput = document.getElementById('userName');
+
+            userNameModal.show();
+
+            userNameForm.addEventListener('submit', function (e) {
+                e.preventDefault();
+                userName = userNameInput.value.trim();
+                if (userName !== '') {
+                    // Hide the modal and proceed
+                    userNameModal.hide();
+
+                    // Emit 'user join' event when the user joins the chat
+                    socket.emit('user join', userName);
+                    
+                    initializeChat();
+                }
+                // You can add additional validation or feedback for an empty name
+            });
+
+            function initializeChat() {
+                const form = document.getElementById('form');
+                const messageInput = document.getElementById('m');
+                const messagesList = document.getElementById('messages');
+                const typingIndicator = document.getElementById('typingIndicator'); // Add this line
+                const userConnected = document.getElementById('userConnected'); //For showing number of users
+                form.addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    const message = messageInput.value;
+                    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); // Get current time without seconds
+                    socket.emit('chat message', { message, userName, time });
+                    appendMessage(userName, message, 'sent-message', time, "left");
+                    messageInput.value = '';
+                    return false;
+                });
+
+                // For handling a chat message broadcast
+                socket.on('chat message', function (data) {
+                    if (userName !== data.userName) {
+                        appendMessage(data.userName, data.message, 'received-message', data.time, "right");
+                    }
+                });
+
+                
+                // For handling a new user join broadcast
+                socket.on('user join', function (newUserName) {
+                    const notificationBox = document.createElement('li');
+                    notificationBox.classList.add('list-group-item', 'notification','bg-danger');
+
+                    const notificationText = document.createElement('p');
+                    notificationText.textContent = `${newUserName} joined`;
+                    notificationText.classList.add('short-notification');
+
+                    // Append the notification element to the messages list
+                    notificationBox.appendChild(notificationText);
+                    messagesList.appendChild(notificationBox);
+                });
+
+                socket.on('user leave', function (newUserName) {
+                    const notificationBox = document.createElement('li');
+                    notificationBox.classList.add('list-group-item', 'notification','bg-danger');
+
+                    const notificationText = document.createElement('p');
+                    notificationText.textContent = `${newUserName} left`;
+                    notificationText.classList.add('short-notification', 'bg-danger');
+
+                    // Append the notification element to the messages list
+                    notificationBox.appendChild(notificationText);
+                    messagesList.appendChild(notificationBox);
+                });
+
+                // Add typing event handlers
+                messageInput.addEventListener('input', function () {
+                    socket.emit('typing', { userName });
+                });
+
+                socket.on('typing', function ({ userName }) {
+                    typingIndicator.textContent = `${userName} is typing...`;
+                });
+
+                socket.on('stop typing', function ({ userName }) {
+                    typingIndicator.textContent = '';
+                });
+
+                // Inside initializeChat function
+                socket.on('stored messages', function (storedMessages) {
+                        storedMessages.forEach((message) => {
+                        appendMessage(message.userName, message.message, 'received-message', message.time, "right");
+                    });
+                });
+
+                socket.on('users online', (count)=>{
+                    userConnected.innerHTML = `Users Online: ${count}`;
+                })
+
+
+                function appendMessage(sender, message, messageClass, time, side) {
+                    const li = document.createElement('li');
+                    li.classList.add('list-group-item', messageClass);
+
+                    const parentContainer = document.createElement('div');
+                    const container = document.createElement('div');
+                    container.classList.add('message-container');
+
+                    // const profileIcon = document.createElement('i');
+                    // profileIcon.classList.add('fas', 'fa-user-circle', 'profile-icon'); // Font Awesome icon class
+                    
+                    const profileIcon = document.createElement('img');
+                    
+                    profileIcon.src = selectIcon1(sender);  
+                    profileIcon.classList.add('profile-icon');
+
+                    const messageContent = document.createElement('div');
+                    const senderElement = document.createElement('span');
+                    senderElement.textContent = sender;
+                    senderElement.classList.add('bold-italic',); 
+                    
+
+                    const timeElement = document.createElement('div');
+                    timeElement.textContent = time;
+                    timeElement.classList.add('time');
+
+                    const messageText = document.createElement('div');
+                    messageText.style.wordBreak = 'break-all'; // Enable word break
+                    messageText.textContent = message;
+
+                    if (side == "left") {
+                        container.appendChild(profileIcon);
+                        messageContent.appendChild(senderElement);
+                        messageContent.appendChild(timeElement);
+                        messageContent.appendChild(messageText);
+                        container.appendChild(messageContent);
+                        container.classList.add('text-white');
+                        li.classList.add('bg-success');
+                        
+                    
+                    } else if (side == "right") {
+                        messageContent.appendChild(senderElement);    
+                        messageContent.appendChild(messageText);
+                        container.appendChild(messageContent);
+                        container.appendChild(timeElement);
+                        container.appendChild(profileIcon);
+                        container.classList.add('bg-info','text-white');
+                        li.classList.add('bg-info');
+                    }
+
+                    li.appendChild(container);
+                    messagesList.appendChild(li);
+                }
+
+                function selectIcon1(userName){
+                    return `Icons/${userName[0]}.png`;
+                }
+            }
+        });
+    </script>
+</body>
+</html>
